@@ -1,76 +1,67 @@
+import os
 import streamlit as st
 import pandas as pd
 
-
 st.title("ESG Score Calculator and Rating")
 
+# File path to the CSV
+csv_file_path = "merged.csv"
 
-st.markdown("### Enter Company Details")
-company_name = st.text_input("Company Name", value="", placeholder="Enter the company name")
+# Load the CSV file
+@st.cache_data
+def load_csv(file_path):
+    return pd.read_csv(file_path)
 
+if not os.path.exists(csv_file_path):
+    st.error(f"CSV file not found at: {csv_file_path}. Please verify the path.")
+    st.stop()
 
-st.markdown("### Enter ESG Scores")
-environmental_score = st.slider("Environmental Score (0-100)", 0, 100, 0)  
-social_score = st.slider("Social Score (0-100)", 0, 100, 0)  
-governance_score = st.slider("Governance Score (0-100)", 0, 100, 0)  
+df = load_csv(csv_file_path)
+column_mapping = {
+    "COMPANY_NAME": "Company",
+    "IVA_INDUSTRY": "Type",
+    "ENVIRONMENTAL_PILLAR_SCORE": "Environmental Score",
+    "SOCIAL_PILLAR_SCORE": "Social Score",
+    "GOVERNANCE_PILLAR_SCORE": "Governance Score",
+}
+df.rename(columns=column_mapping, inplace=True)
 
+# Ensure 'Type' exists
+if "Type" not in df.columns:
+    df["Type"] = "Unknown"
 
-if company_name:
-    overall_score = (environmental_score + social_score + governance_score) / 3
-else:
-    overall_score = None  
+# Search for company
+st.markdown("### Search for a Company")
+selected_company = st.text_input("Enter Company Name:", placeholder="Type company name here")
 
-def get_esg_rating(score):
-    if score is None:
-        return None
-    elif score >= 90:
-        return "AAA"
-    elif score >= 80:
-        return "AA"
-    elif score >= 70:
-        return "A"
-    elif score >= 60:
-        return "BBB"
-    elif score >= 50:
-        return "BB"
-    elif score >= 40:
-        return "B"
-    elif score >= 30:
-        return "CCC"
+if selected_company:
+    matching_companies = df[df["Company"].str.contains(selected_company, na=False, case=False)]
+    if not matching_companies.empty:
+        st.success(f"Company '{selected_company}' found in the dataset.")
+        st.dataframe(matching_companies)
+
+        # Add "Go to Visualization" message with hyperlink
+        visualization_url = "https://studious-memory-q7ppxr6vgqr39qj5-8501.app.github.dev/Visualization"
+        st.markdown(f"[Go to Visualization]({visualization_url})", unsafe_allow_html=True)
     else:
-        return "D"
+        st.warning(f"Company '{selected_company}' not found in the dataset.")
 
-rating = get_esg_rating(overall_score)
-if company_name:
-    st.markdown("### Results")
-    st.write(f"**Overall ESG Score:** {overall_score:.2f}")
-    st.write(f"**ESG Rating:** {rating}")
-else:
-    st.warning("Enter a valid company name to see the results.")
+        # Add new company details
+        st.markdown("### Add New Company")
+        company_type = st.selectbox("Select Company Type:", options=df["Type"].unique())
+        environmental_score = st.slider("Environmental Score (0-10):", 0, 10, 10)
+        social_score = st.slider("Social Score (0-10):", 0, 10, 10)
+        governance_score = st.slider("Governance Score (0-10):", 0, 10, 10)
 
-# Initialize session state for ESG results
-if "esg_results" not in st.session_state:
-    st.session_state["esg_results"] = []
-
-# Save the Result
-if st.button("Save Result"):
-    if not company_name:
-        st.error("Please enter a company name before saving!")
-    else:
-        st.session_state["esg_results"].append({
-            "Company": company_name,
-            "Environmental Score": environmental_score,
-            "Social Score": social_score,
-            "Governance Score": governance_score,
-            "Overall Score": overall_score,
-            "Rating": rating
-        })
-        st.success(f"Result for {company_name} saved successfully!")
-
-# Display Saved Results (conditionally)
-if st.session_state["esg_results"]:
-    st.markdown("### Saved Results")
-    results_df = pd.DataFrame(st.session_state["esg_results"])
-    st.dataframe(results_df)
-else:
-    st.info("No saved results yet. Enter details and save to view results.")
+        if st.button("Save New Company"):
+            new_data = {
+                "Company": selected_company,
+                "Type": company_type,
+                "Environmental Score": environmental_score,
+                "Social Score": social_score,
+                "Governance Score": governance_score,
+            }
+            # Append to the CSV file
+            new_df = pd.DataFrame([new_data])
+            new_df.to_csv(csv_file_path, mode="a", header=False, index=False)
+            st.success(f"New company '{selected_company}' added successfully!")
